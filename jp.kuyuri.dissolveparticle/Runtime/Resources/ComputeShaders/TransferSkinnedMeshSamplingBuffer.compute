@@ -1,0 +1,87 @@
+﻿#pragma kernel TransferMeshSamplingBuffer
+
+#include "MeshSamplingHeader.hlsl"
+
+struct SamplePoint
+{
+    uint4 indices;
+    float4 weights;
+};
+
+uint SampleCount;
+float4x4 Transforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
+float4x4 OldTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
+float FrameRate;
+
+float4x4 WorldToLocalTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
+
+StructuredBuffer<SamplePoint> SamplePoints;
+StructuredBuffer<float3> PositionBuffer;
+StructuredBuffer<uint> PositionOSIndexBuffer;
+StructuredBuffer<float3> OldPositionBuffer;
+StructuredBuffer<float3> NormalBuffer;
+StructuredBuffer<float2> UvBuffer;
+
+RWStructuredBuffer<MeshSamplingPoint> MeshSamplingBuffer;
+
+// Point sampling function
+float3 SampleBuffer(StructuredBuffer<float3> buffer, SamplePoint sp)
+{
+    return buffer[sp.indices.x] * sp.weights.x + 
+           buffer[sp.indices.y] * sp.weights.y + 
+           buffer[sp.indices.z] * sp.weights.z;
+}
+
+float2 SampleBuffer(StructuredBuffer<float2> buffer, SamplePoint sp)
+{
+    return buffer[sp.indices.x] * sp.weights.x + 
+           buffer[sp.indices.y] * sp.weights.y + 
+           buffer[sp.indices.z] * sp.weights.z;
+}
+
+uint SampleBuffer(StructuredBuffer<uint> buffer, SamplePoint sp)
+{
+    return buffer[sp.indices.x] * sp.weights.x + 
+           buffer[sp.indices.y] * sp.weights.y + 
+           buffer[sp.indices.z] * sp.weights.z;
+}
+
+// Hash function from H. Schechter & R. Bridson, goo.gl/RXiKaH
+uint Hash(uint s)
+{
+    s ^= 2747636419u;
+    s *= 2654435769u;
+    s ^= s >> 16;
+    s *= 2654435769u;
+    s ^= s >> 16;
+    s *= 2654435769u;
+    return s;
+}
+
+[numthreads(64, 1, 1)]
+void TransferMeshSamplingBuffer(uint id : SV_DispatchThreadID)
+{
+    uint si = Hash(id * 65536) % SampleCount;
+    SamplePoint sp = SamplePoints[si];
+
+    float3 p1 = SampleBuffer(PositionBuffer, sp);
+    float3 p0 = SampleBuffer(OldPositionBuffer, sp);
+    float3 n1 = normalize(SampleBuffer(NormalBuffer, sp));
+    float2 u1 = SampleBuffer(UvBuffer, sp);
+    uint i1 = SampleBuffer(PositionOSIndexBuffer, sp);
+
+    float3 p0w = mul(OldTransforms[i1], float4(p0, 1)).xyz;
+    float3 p1w = mul(   Transforms[i1], float4(p1, 1)).xyz;
+    float3 n1w = mul(   Transforms[i1], float4(n1, 0)).xyz;
+
+    float3 p0o = mul(WorldToLocalTransforms[i1], float4(p0w, 1)).xyz;
+
+    MeshSamplingPoint msp;
+    msp.position = p1w;
+    msp.positionOS = p0o;
+    msp.normal = n1w;
+    msp.velocity = (p1w - p0w) * FrameRate;
+    msp.uv = u1;
+    
+    MeshSamplingBuffer[id] = msp;
+}

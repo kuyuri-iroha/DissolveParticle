@@ -1,0 +1,56 @@
+﻿#pragma kernel Initialize
+#pragma kernel DissolveBorderSamplingLil
+
+#include "MeshSamplingHeader.hlsl"
+
+struct DissolveSamplingPoint
+{
+    float3 position;
+    float3 normal;
+    float3 velocity;
+    float2 uv;
+    float enabled;
+};
+
+uint SourceCount;
+
+float3 DissolvePosition;
+float DissolveRange;
+float DissolveBlur;
+Texture2D DissolveNoise;
+SamplerState sampler_DissolveNoise;
+float2 DissolveNoiseTiling;
+float2 DissolveNoiseOffset;
+float DissolveNoiseStrength;
+float DissolveEnabled;
+
+StructuredBuffer<MeshSamplingPoint> MeshSamplingBuffer;
+RWStructuredBuffer<DissolveSamplingPoint> DissolveBorderSamplingBuffer;
+
+[numthreads(64, 1, 1)]
+void Initialize(uint id : SV_DispatchThreadID)
+{
+    DissolveBorderSamplingBuffer[id].enabled = 0.0;
+}
+
+[numthreads(64, 1, 1)]
+void DissolveBorderSamplingLil(uint id : SV_DispatchThreadID)
+{
+    MeshSamplingPoint mp = MeshSamplingBuffer[id];
+    const float signedDistance = distance(mp.positionOS, DissolvePosition) - DissolveRange;
+    if(signedDistance < DissolveBlur && signedDistance > 0)
+    {
+        DissolveSamplingPoint dp;
+        dp.enabled = 1.0;
+        dp.position = mp.position;
+        dp.normal = mp.normal;
+        dp.velocity = mp.velocity;
+        dp.uv = mp.uv;
+
+        DissolveBorderSamplingBuffer[id] = dp;
+    }
+    else
+    {
+        DissolveBorderSamplingBuffer[id].enabled = 0.0;
+    }
+}
