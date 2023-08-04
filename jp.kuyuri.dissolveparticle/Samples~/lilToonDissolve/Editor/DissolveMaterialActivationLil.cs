@@ -76,6 +76,12 @@ namespace Kuyuri
                                         // マルチマテリアルの場合はTransparentModeでRenderingModeを切り替えるため、Cutoutになるよう変更する必要がある
                                         dissolveMaterial.SetFloat("_TransparentMode", 1.0f);
                                     }
+                                    
+                                    // RenderingModeがOpaqueの場合はThresholdを調整する
+                                    if(lilMaterialMode.renderingMode == RenderingMode.Opaque)
+                                    {
+                                        dissolveMaterial.SetFloat("_Cutoff", 0.001f);
+                                    }
 
                                     var type = typeof(lilMaterialUtils);
                                     var setupMaterialWithRenderingMode = type.GetMethod("SetupMaterialWithRenderingMode",
