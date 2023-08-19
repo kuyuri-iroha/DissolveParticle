@@ -59,56 +59,44 @@ namespace Kuyuri
 
                         if (!createdMaterials.ContainsKey(dissolveMaterialPath))
                         {
-                            Material dissolveMaterial;
-                            dissolveMaterial = new Material(material);
+                            var dissolveMaterial = new Material(material.shader)
+                            {
+                                name = dissolveMaterialName
+                            };
 
-                            dissolveMaterial.name = dissolveMaterialName;
+                            dissolveMaterial.CopyPropertiesFromMaterial(material);
+
                             if (lilMaterialUtils.CheckShaderIslilToon(material))
                             {
                                 // Dissolveに対応したマテリアル設定へ変更
                                 CheckShaderType(material, out var lilMaterialMode);
 
-                                if (lilMaterialMode.renderingMode != RenderingMode.Cutout &&
-                                    lilMaterialMode.renderingMode != RenderingMode.Transparent)
+                                if (!(lilMaterialMode.isTransparent || lilMaterialMode.isCutout))
                                 {
-                                    if (lilMaterialMode.isMulti)
+                                    if (material.HasProperty("_TransparentMode"))
                                     {
-                                        // マルチマテリアルの場合はTransparentModeでRenderingModeを切り替えるため、Cutoutになるよう変更する必要がある
+                                        // TransparentModeでRenderingModeを切り替えるためにCutoutになるよう変更する必要がある
                                         dissolveMaterial.SetFloat("_TransparentMode", 1.0f);
                                     }
-                                    
-                                    // RenderingModeがOpaqueの場合はThresholdを調整する
-                                    if(lilMaterialMode.renderingMode == RenderingMode.Opaque)
-                                    {
-                                        dissolveMaterial.SetFloat("_Cutoff", 0.001f);
-                                    }
-
-                                    var type = typeof(lilMaterialUtils);
-                                    var setupMaterialWithRenderingMode = type.GetMethod("SetupMaterialWithRenderingMode",
-                                        BindingFlags.Static | BindingFlags.NonPublic);
-                                    setupMaterialWithRenderingMode.Invoke(null,
-                                        new object[]
-                                        {
-                                            dissolveMaterial,
-                                            RenderingMode.Cutout,
-                                            lilMaterialMode.transparentMode,
-                                            lilMaterialMode.isOutl,
-                                            lilMaterialMode.isLite,
-                                            lilMaterialMode.isTess,
-                                            lilMaterialMode.isMulti
-                                        });
 
                                     log.AppendLine(
                                         $"Change RenderingMode of {material.name} from {lilMaterialMode.renderingMode} to {RenderingMode.Cutout}");
+                                }
+                                else
+                                {
+                                    log.AppendLine(
+                                        $"Unchanged RenderingMode {lilMaterialMode.renderingMode} of {material.name}");
                                 }
 
                                 // Dissolveの有効化
                                 dissolveMaterial.SetVector("_DissolveParams", new Vector4(3.0f, 0.0f, 0.0f, 0.0f));
                             }
-
+                            
                             Directory.CreateDirectory(dissolveDirectoryPath);
                             AssetDatabase.CreateAsset(dissolveMaterial, dissolveMaterialPath);
-                            
+                            EditorUtility.SetDirty(dissolveMaterial);
+                            AssetDatabase.SaveAssets();
+
                             createdMaterials.Add(dissolveMaterialPath, dissolveMaterial);
                             
                             dissolveMaterials[j] = dissolveMaterial;
@@ -175,67 +163,64 @@ namespace Kuyuri
             public bool isStWr;
             public bool isUseAlpha;
         }
-
+        
         private static void CheckShaderType(Material material, out lilMaterialMode lilMaterialMode)
         {
             var stencilPassFloatValue = material.GetFloat("_StencilPass");
-            Object[] objects = Selection.GetFiltered<Material>(SelectionMode.DeepAssets)
-                .Where(obj => obj.shader != null).Where(obj => obj.shader.name.Contains("lilToon")).ToArray();
-            var isMultiVariants = objects.Any(obj => ((Material) obj).shader != material.shader);
-
-            var isLite = material.shader.name.Contains("Lite");
-            var isCutout = material.shader.name.Contains("Cutout");
-            var isTransparent = material.shader.name.Contains("Transparent") ||
-                                material.shader.name.Contains("Overlay");
-            var isOutl = !isMultiVariants && material.shader.name.Contains("Outline");
-            var isRefr = !isMultiVariants && material.shader.name.Contains("Refraction");
-            var isBlur = !isMultiVariants && material.shader.name.Contains("Blur");
-            var isFur = !isMultiVariants && material.shader.name.Contains("Fur");
-            var isTess = !isMultiVariants && material.shader.name.Contains("Tessellation");
-            var isGem = !isMultiVariants && material.shader.name.Contains("Gem");
-            var isFakeShadow = !isMultiVariants && material.shader.name.Contains("FakeShadow");
-            var isOnePass = material.shader.name.Contains("OnePass");
-            var isTwoPass = material.shader.name.Contains("TwoPass");
-            var isMulti = material.shader.name.Contains("Multi");
-            var isCustomShader = material.shader.name.Contains("Optional");
+            Object[] objects = Selection.GetFiltered<Material>(SelectionMode.DeepAssets).Where(obj => obj.shader != null).Where(obj => obj.shader.name.Contains("lilToon")).ToArray();
+            var isMultiVariants = objects.Any(obj => ((Material)obj).shader != material.shader);
+            
+            var isLite          = material.shader.name.Contains("Lite");
+            var isCutout        = material.shader.name.Contains("Cutout");
+            var isTransparent   = material.shader.name.Contains("Transparent") || material.shader.name.Contains("Overlay");
+            var isOutl          = !isMultiVariants && material.shader.name.Contains("Outline");
+            var isRefr          = !isMultiVariants && material.shader.name.Contains("Refraction");
+            var isBlur          = !isMultiVariants && material.shader.name.Contains("Blur");
+            var isFur           = !isMultiVariants && material.shader.name.Contains("Fur");
+            var isTess          = !isMultiVariants && material.shader.name.Contains("Tessellation");
+            var isGem           = !isMultiVariants && material.shader.name.Contains("Gem");
+            var isFakeShadow    = !isMultiVariants && material.shader.name.Contains("FakeShadow");
+            var isOnePass       = material.shader.name.Contains("OnePass");
+            var isTwoPass       = material.shader.name.Contains("TwoPass");
+            var isMulti         = material.shader.name.Contains("Multi");
+            var isCustomShader  = material.shader.name.Contains("Optional");
             var isShowRenderMode = !isCustomShader;
-            var isStWr = stencilPassFloatValue == (float) StencilOp.Replace;
-
-            var renderingMode = RenderingMode.Opaque;
-            if (isCutout) renderingMode = RenderingMode.Cutout;
-            if (isTransparent) renderingMode = RenderingMode.Transparent;
-            if (isRefr) renderingMode = RenderingMode.Refraction;
-            if (isRefr && isBlur) renderingMode = RenderingMode.RefractionBlur;
-            if (isFur) renderingMode = RenderingMode.Fur;
-            if (isFur && isCutout) renderingMode = RenderingMode.FurCutout;
-            if (isFur && isTwoPass) renderingMode = RenderingMode.FurTwoPass;
-            if (isGem) renderingMode = RenderingMode.Gem;
-
-            var transparentMode = TransparentMode.Normal;
-            if (isOnePass) transparentMode = TransparentMode.OnePass;
-            if (!isFur && isTwoPass) transparentMode = TransparentMode.TwoPass;
-
+            var isStWr          = stencilPassFloatValue == (float)UnityEngine.Rendering.StencilOp.Replace;
+            
             float tpmode = 0.0f;
-            if (material.HasProperty("_TransparentMode")) tpmode = material.GetFloat("_TransparentMode");
-
-            var isUseAlpha =
-                renderingMode == RenderingMode.Cutout ||
-                renderingMode == RenderingMode.Transparent ||
-                renderingMode == RenderingMode.Fur ||
-                renderingMode == RenderingMode.FurCutout ||
-                renderingMode == RenderingMode.FurTwoPass ||
-                (isMulti && tpmode != 0.0f && tpmode != 3.0f && tpmode != 6.0f);
-
-            if (isMulti)
+            if(material.HasProperty("_TransparentMode")) tpmode = material.GetFloat("_TransparentMode");
+            if(isMulti)
             {
                 isCutout = tpmode == 1.0f || tpmode == 5.0f;
                 isTransparent = tpmode == 2.0f;
             }
 
+            var                     renderingModeBuf = RenderingMode.Opaque;
+            if(isCutout)            renderingModeBuf = RenderingMode.Cutout;
+            if(isTransparent)       renderingModeBuf = RenderingMode.Transparent;
+            if(isRefr)              renderingModeBuf = RenderingMode.Refraction;
+            if(isRefr && isBlur)    renderingModeBuf = RenderingMode.RefractionBlur;
+            if(isFur)               renderingModeBuf = RenderingMode.Fur;
+            if(isFur && isCutout)   renderingModeBuf = RenderingMode.FurCutout;
+            if(isFur && isTwoPass)  renderingModeBuf = RenderingMode.FurTwoPass;
+            if(isGem)               renderingModeBuf = RenderingMode.Gem;
+
+            var                     transparentModeBuf = TransparentMode.Normal;
+            if(isOnePass)           transparentModeBuf = TransparentMode.OnePass;
+            if(!isFur && isTwoPass) transparentModeBuf = TransparentMode.TwoPass;
+
+            var isUseAlpha =
+                renderingModeBuf == RenderingMode.Cutout ||
+                renderingModeBuf == RenderingMode.Transparent ||
+                renderingModeBuf == RenderingMode.Fur ||
+                renderingModeBuf == RenderingMode.FurCutout ||
+                renderingModeBuf == RenderingMode.FurTwoPass ||
+                (isMulti && tpmode != 0.0f && tpmode != 3.0f && tpmode != 6.0f);
+
             lilMaterialMode = new lilMaterialMode()
             {
-                renderingMode = renderingMode,
-                transparentMode = transparentMode,
+                renderingMode = renderingModeBuf,
+                transparentMode = transparentModeBuf,
                 isLite = isLite,
                 isCutout = isCutout,
                 isTransparent = isTransparent,
@@ -255,5 +240,31 @@ namespace Kuyuri
                 isUseAlpha = isUseAlpha
             };
         }
+
+        [MenuItem("Assets/ActivateDissolveMaterial/lilToonMultiMaterialSetup")]
+        public static void lilToonMultiMaterialSetup()
+        {
+            var material = Selection.activeObject as Material;
+            
+            CheckShaderType(material, out var lilMaterialMode);
+            
+            var type = typeof(lilMaterialUtils);
+            var setupMaterialWithRenderingMode = type.GetMethod("SetupMaterialWithRenderingMode",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            
+            setupMaterialWithRenderingMode.Invoke(null,
+                new object[]
+                {
+                    material,
+                    RenderingMode.Cutout,
+                    lilMaterialMode.transparentMode,
+                    lilMaterialMode.isOutl,
+                    lilMaterialMode.isLite,
+                    lilMaterialMode.isTess,
+                    lilMaterialMode.isMulti
+                }
+            );
+        }
+        
     }
 }
