@@ -241,7 +241,7 @@ namespace Kuyuri
             };
         }
 
-        [MenuItem("Assets/ActivateDissolveMaterial/lilToonMultiMaterialSetup")]
+        //[MenuItem("Assets/ActivateDissolveMaterial/lilToonMultiMaterialSetup")]
         public static void lilToonMultiMaterialSetup()
         {
             var material = Selection.activeObject as Material;
