@@ -51,6 +51,7 @@ namespace Kuyuri
         private Tween _disappearTween;
         
         private bool _initialized = false;
+        private bool _isAppear = false;
 
         private static readonly int DissolvePos = Shader.PropertyToID("_DissolvePos");
         private static readonly int DissolveParam = Shader.PropertyToID("_DissolveParams");
@@ -80,6 +81,7 @@ namespace Kuyuri
 
             // Dissolve
             var startDissolvePosition = Vector3.zero;
+            _isAppear = appearOnStart;
             if (appearOnStart)
             {
                 startDissolvePosition = appearEndPos;
@@ -169,6 +171,7 @@ namespace Kuyuri
             _disappearTween?.Kill();
 
             ActivateMeshes(true);
+            _isAppear = false;
 
             DissolvePosition = appearStartPos;
             _appearTween = DOTween.To(
@@ -182,6 +185,7 @@ namespace Kuyuri
                 .OnComplete(() =>
                 {
                     visualEffect.SendEvent(stopEventName);
+                    _isAppear = true;
                 });
 
             visualEffect.SendEvent(spawnEventName);
@@ -196,6 +200,7 @@ namespace Kuyuri
             _disappearTween?.Kill();
 
             ActivateMeshes(true);
+            _isAppear = true;
             
             DissolvePosition = disappearStartPos;
             _disappearTween = DOTween.To(
@@ -210,21 +215,38 @@ namespace Kuyuri
                 {
                     visualEffect.SendEvent(stopEventName);
                     ActivateMeshes(false);
+                    _isAppear = false;
                 });
 
             visualEffect.SendEvent(spawnEventName);
         }
 
-        public void ToggleAppear()
+        public void InstantToggle()
         {
-            ActivateMeshes(true);
+            InstantFromBool(!_isAppear);
         }
         
-        public void ToggleDisappear()
+        public void DissolveToggle()
         {
-            ActivateMeshes(false);
+            DissolveFromBool(!_isAppear);
         }
 
+        public void InstantAppear()
+        {
+            ActivateMeshes(true);
+            _isAppear = true;
+        }
+        
+        public void InstantDisappear()
+        {
+            ActivateMeshes(false);
+            _isAppear = false;
+        }
+        
+        public bool IsAppear()
+        {
+            return _isAppear;
+        }
 
         /// <summary>
         /// ディゾルブをブールで制御する
@@ -242,15 +264,15 @@ namespace Kuyuri
             }
         }
 
-        public void ToggleFromBool(bool appear)
+        public void InstantFromBool(bool appear)
         {
             if (appear)
             {
-                ToggleAppear();
+                InstantAppear();
             }
             else
             {
-                ToggleDisappear();
+                InstantDisappear();
             }
         }
 
@@ -275,28 +297,40 @@ namespace Kuyuri
 
         #region ContexMenu
 
-        [ContextMenu("DissolveFromBoolTrue")]
+        [ContextMenu("DissolveAppear")]
         private void DissolveFromBoolTrue()
         {
             DissolveFromBool(true);
         }
 
-        [ContextMenu("DissolveFromBoolFalse")]
+        [ContextMenu("DissolveDisappear")]
         private void DissolveFromBoolFalse()
         {
             DissolveFromBool(false);
         }
         
-        [ContextMenu("ToggleFromBoolTrue")]
-        private void ToggleFromBoolTrue()
+        [ContextMenu("InstantAppear")]
+        private void InstantFromBoolTrue()
         {
-            ToggleFromBool(true);
+            InstantFromBool(true);
         }
         
-        [ContextMenu("ToggleFromBoolFalse")]
-        private void ToggleFromBoolFalse()
+        [ContextMenu("InstantDisappear")]
+        private void InstantFromBoolFalse()
         {
-            ToggleFromBool(false);
+            InstantFromBool(false);
+        }
+        
+        [ContextMenu("InstantToggle")]
+        private void InstantToggleContext()
+        {
+            InstantToggle();
+        }
+        
+        [ContextMenu("DissolveToggle")]
+        private void DissolveToggleContext()
+        {
+            DissolveToggle();
         }
         
         #endregion
