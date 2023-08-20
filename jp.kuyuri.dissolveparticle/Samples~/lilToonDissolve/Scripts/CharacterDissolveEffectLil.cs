@@ -233,14 +233,24 @@ namespace Kuyuri
 
         public void InstantAppear()
         {
+            _appearTween?.Kill();
+            _disappearTween?.Kill();
+            
             ActivateMeshes(true);
             _isAppear = true;
+            
+            DissolvePosition = appearEndPos;
         }
         
         public void InstantDisappear()
         {
+            _appearTween?.Kill();
+            _disappearTween?.Kill();
+            
             ActivateMeshes(false);
             _isAppear = false;
+            
+            DissolvePosition = disappearEndPos;
         }
         
         public bool IsAppear()
