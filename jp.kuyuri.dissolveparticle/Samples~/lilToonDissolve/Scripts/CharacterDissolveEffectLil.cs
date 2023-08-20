@@ -215,6 +215,17 @@ namespace Kuyuri
             visualEffect.SendEvent(spawnEventName);
         }
 
+        public void ToggleAppear()
+        {
+            ActivateMeshes(true);
+        }
+        
+        public void ToggleDisappear()
+        {
+            ActivateMeshes(false);
+        }
+
+
         /// <summary>
         /// ディゾルブをブールで制御する
         /// </summary>
@@ -228,6 +239,18 @@ namespace Kuyuri
             else
             {
                 DissolveDisappear();
+            }
+        }
+
+        public void ToggleFromBool(bool appear)
+        {
+            if (appear)
+            {
+                ToggleAppear();
+            }
+            else
+            {
+                ToggleDisappear();
             }
         }
 
@@ -263,7 +286,19 @@ namespace Kuyuri
         {
             DissolveFromBool(false);
         }
-
+        
+        [ContextMenu("ToggleFromBoolTrue")]
+        private void ToggleFromBoolTrue()
+        {
+            ToggleFromBool(true);
+        }
+        
+        [ContextMenu("ToggleFromBoolFalse")]
+        private void ToggleFromBoolFalse()
+        {
+            ToggleFromBool(false);
+        }
+        
         #endregion
     }
 }
