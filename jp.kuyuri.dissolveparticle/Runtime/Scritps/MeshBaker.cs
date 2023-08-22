@@ -54,7 +54,7 @@ namespace Kuyuri
 
 
         protected const int ComputeThreadNum = 64;
-        protected const int MaxSkinnedMeshSourceCount = 64;
+        protected const int MaxSkinnedMeshSourceCount = 128;
 
         #region Public
 
@@ -217,7 +217,7 @@ namespace Kuyuri
             var sourceLength = _sources.Length;
             if (sourceLength > MaxSkinnedMeshSourceCount)
             {
-                Debug.LogError($"Too many skinned mesh sources. Max count is {MaxSkinnedMeshSourceCount}");
+                Debug.LogError($"Too many mesh sources. Max count is {MaxSkinnedMeshSourceCount}");
                 sourceLength = MaxSkinnedMeshSourceCount;
             }
 
