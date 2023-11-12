@@ -9,11 +9,7 @@ struct SamplePoint
 };
 
 uint SampleCount;
-float4x4 Transforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
-float4x4 OldTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
 float FrameRate;
-
-float4x4 WorldToLocalTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
 
 StructuredBuffer<SamplePoint> SamplePoints;
 StructuredBuffer<float3> PositionBuffer;
@@ -21,6 +17,7 @@ StructuredBuffer<uint> PositionOSIndexBuffer;
 StructuredBuffer<float3> OldPositionBuffer;
 StructuredBuffer<float3> NormalBuffer;
 StructuredBuffer<float2> UvBuffer;
+StructuredBuffer<SkinnedMeshData> SkinnedMeshDataBuffer;
 
 RWStructuredBuffer<MeshSamplingPoint> MeshSamplingBuffer;
 
@@ -70,11 +67,12 @@ void TransferMeshSamplingBuffer(uint id : SV_DispatchThreadID)
     float2 u1 = SampleBuffer(UvBuffer, sp);
     uint i1 = SampleBuffer(PositionOSIndexBuffer, sp);
 
-    float3 p0w = mul(OldTransforms[i1], float4(p0, 1)).xyz;
-    float3 p1w = mul(   Transforms[i1], float4(p1, 1)).xyz;
-    float3 n1w = mul(   Transforms[i1], float4(n1, 0)).xyz;
+    SkinnedMeshData smd = SkinnedMeshDataBuffer[i1];
+    float3 p0w = mul(smd.previousRootMatrix, float4(p0, 1)).xyz;
+    float3 p1w = mul(smd.currentRootMatrix, float4(p1, 1)).xyz;
+    float3 n1w = mul(smd.currentRootMatrix, float4(n1, 0)).xyz;
 
-    float3 p0o = mul(WorldToLocalTransforms[i1], float4(p0w, 1)).xyz;
+    float3 p0o = mul(smd.worldToLocalTransform, float4(p0w, 1)).xyz;
 
     MeshSamplingPoint msp;
     msp.position = p1w;
@@ -82,6 +80,7 @@ void TransferMeshSamplingBuffer(uint id : SV_DispatchThreadID)
     msp.normal = n1w;
     msp.velocity = (p1w - p0w) * FrameRate;
     msp.uv = u1;
+    msp.meshIndex = i1;
     
     MeshSamplingBuffer[id] = msp;
 }

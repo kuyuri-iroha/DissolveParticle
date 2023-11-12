@@ -9,11 +9,11 @@ struct SamplePoint
 };
 
 uint SampleCount;
-float4x4 Transforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
-float4x4 OldTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
+float4x4 Transforms[MESH_MAX];
+float4x4 OldTransforms[MESH_MAX];
 float FrameRate;
 
-float4x4 WorldToLocalTransforms[WORLD_TO_LOCAL_TRANSFORM_MAX];
+float4x4 WorldToLocalTransforms[MESH_MAX];
 
 StructuredBuffer<SamplePoint> SamplePoints;
 StructuredBuffer<float3> PositionBuffer;
@@ -82,6 +82,7 @@ void TransferMeshSamplingBuffer(uint id : SV_DispatchThreadID)
     msp.normal = n1w;
     msp.velocity = (p1w - p0w) * FrameRate;
     msp.uv = u1;
+    msp.meshIndex = i1;
     
     MeshSamplingBuffer[id] = msp;
 }

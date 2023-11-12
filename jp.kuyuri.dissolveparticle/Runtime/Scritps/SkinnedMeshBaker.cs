@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Kuyuri.Externals.Smrvfx;
 using UnityEngine;
@@ -15,24 +18,32 @@ namespace Kuyuri
         public Vector3 normal;
         public Vector3 velocity;
         public Vector2 uv;
+        public uint meshIndex;
     }
     
     public class SkinnedMeshBaker
     {
-        private SkinnedMeshRenderer[] _sources;
-        private int[] _sourcesMaterialsLength;
+        private struct SkinnedMeshData
+        {
+            public int MeshIndex;
+            public int MaterialCount;
+            
+            public Matrix4x4 CurrentRootMatrix;
+            public Matrix4x4 PreviousRootMatrix;
+            public Matrix4x4 WorldToLocalTransform;
+        }
+        
+        private OrderedDictionary _skinnedMeshsources;
+        public OrderedDictionary SkinnedMeshSources => _skinnedMeshsources;
         private int _pointCount = 65536;
         
         private readonly ComputeShader _compute = null;
 
-        public SkinnedMeshRenderer[] Sources => _sources;
-        public int[] SourcesMaterialsLength => _sourcesMaterialsLength;
-        
-        public int VertexCount => _pointCount;
+        protected int VertexCount => _pointCount;
 
         public GraphicsBuffer MeshSamplingBuffer => _meshSamplingBuffer;
-        
-        public bool IsValid => _sources != null && _sources.Length > 0;
+
+        protected bool IsValid => _skinnedMeshsources is { Count: > 0 };
         
         private GraphicsBuffer _samplePoints;
         private GraphicsBuffer _positionBuffer1;
@@ -40,18 +51,15 @@ namespace Kuyuri
         private GraphicsBuffer _positionBuffer2;
         private GraphicsBuffer _normalBuffer;
         private GraphicsBuffer _uvBuffer;
+        private GraphicsBuffer _skinnedMeshDataBuffer;
 
         private GraphicsBuffer _meshSamplingBuffer;
 
-        private Matrix4x4[] _currentRootMatrices;
-        private Matrix4x4[] _previousRootMatrices;
-        private Matrix4x4[] _worldToLocalTransforms;
-        public Matrix4x4[] WorldToLocalTransforms => _worldToLocalTransforms;
         private Mesh _tempMesh;
 
 
         protected const int ComputeThreadNum = 64;
-        protected const int MaxSkinnedMeshSourceCount = 64;
+        protected const int MaxSkinnedMeshSourceCount = 256;
 
         #region Public
 
@@ -72,17 +80,22 @@ namespace Kuyuri
             if (_tempMesh == null) Initialize();
 
             // Bake the sources into the buffers.
+            var skinnedMeshRenderers = _skinnedMeshsources.Keys.Cast<SkinnedMeshRenderer>().ToArray();
             var offset = 0;
-            for (var i = 0; i < _sources.Length; i++)
+            for (var i = 0; i < _skinnedMeshsources.Count; i++)
             {
-                offset += BakeSource(_sources[i], offset);
+                var skinnedMeshRenderer = skinnedMeshRenderers[i];
+                offset += BakeSource(skinnedMeshRenderer, offset);
                 
-                // Current transform matrix
-                _currentRootMatrices[i] = _sources[i].transform.localToWorldMatrix;
-
-                _worldToLocalTransforms[i] = _sources[i].transform.worldToLocalMatrix;
-                _worldToLocalTransforms[i] = _sources[i].rootBone.worldToLocalMatrix;
+                var data = (SkinnedMeshData) _skinnedMeshsources[i];
+                data.PreviousRootMatrix = data.CurrentRootMatrix;
+                data.CurrentRootMatrix = skinnedMeshRenderer.transform.localToWorldMatrix;
+                data.WorldToLocalTransform = skinnedMeshRenderer.rootBone.worldToLocalMatrix;
+                
+                _skinnedMeshsources[i] = data;
             }
+            
+            _skinnedMeshDataBuffer.SetData(_skinnedMeshsources.Values.Cast<SkinnedMeshData>().ToArray());
 
             // Transfer to MeshSampling
             TransferMeshSampling();
@@ -90,10 +103,6 @@ namespace Kuyuri
             // Position buffer swapping
             (_positionBuffer1, _positionBuffer2)
                 = (_positionBuffer2, _positionBuffer1);
-            
-            // Previous transform matrix
-            (_previousRootMatrices, _currentRootMatrices)
-                = (_currentRootMatrices, _previousRootMatrices);
         }
 
         /// <summary>
@@ -135,14 +144,18 @@ namespace Kuyuri
         /// <param name="skinnedMeshRenderers"></param>
         public void SetSkinnedMeshesNoValidation(SkinnedMeshRenderer[] skinnedMeshRenderers)
         {
-            _sources = skinnedMeshRenderers;
-            
-            var sourcesLength = new List<int>();
-            for (var i = 0; i < _sources.Length; i++)
+            _skinnedMeshsources = new OrderedDictionary();
+            for (var i = 0; i < skinnedMeshRenderers.Length; i++)
             {
-                sourcesLength.Add(_sources[i].sharedMaterials.Length);
+                _skinnedMeshsources.Add(skinnedMeshRenderers[i], new SkinnedMeshData()
+                {
+                    MeshIndex = i,
+                    MaterialCount = skinnedMeshRenderers[i].sharedMaterials.Length,
+                    CurrentRootMatrix = skinnedMeshRenderers[i].transform.localToWorldMatrix,
+                    PreviousRootMatrix = skinnedMeshRenderers[i].transform.localToWorldMatrix,
+                    WorldToLocalTransform = skinnedMeshRenderers[i].transform.worldToLocalMatrix
+                });
             }
-            _sourcesMaterialsLength = sourcesLength.ToArray();
         }
 
         /// <summary>
@@ -176,8 +189,20 @@ namespace Kuyuri
         /// </summary>
         protected virtual void Initialize()
         {
+            if (_skinnedMeshsources == null || _skinnedMeshsources.Count == 0)
+            {
+                Debug.LogError("SkinnedMeshBaker: SkinnedMeshRenderer is not set.");
+                return;
+            }
+            
+            if (_skinnedMeshsources.Count > MaxSkinnedMeshSourceCount)
+            {
+                Debug.LogError($"Too many skinned mesh sources(${_skinnedMeshsources.Count}). Max count is {MaxSkinnedMeshSourceCount}");
+                return;
+            }
+
             var vCount = 0;
-            using (var mesh = new CombinedMesh(_sources))
+            using (var mesh = new CombinedMesh(_skinnedMeshsources.Keys.Cast<SkinnedMeshRenderer>().Select(v => v.sharedMesh)))
             {
                 // Sample point generation
                 using (var points = SamplePointGenerator.Generate
@@ -191,39 +216,34 @@ namespace Kuyuri
                 // Intermediate buffer allocation
                 vCount = mesh.Vertices.Length;
                 const int float3Size = sizeof(float) * 3;
-                _positionBuffer1 = new GraphicsBuffer(GraphicsBuffer.Target.Structured,vCount, float3Size);
-                _positionBuffer2 = new GraphicsBuffer(GraphicsBuffer.Target.Structured,vCount, float3Size);
-                _normalBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,vCount, float3Size);
-                _uvBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,vCount, sizeof(float) * 2);
+                _positionBuffer1 = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vCount, float3Size);
+                _positionBuffer2 = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vCount, float3Size);
+                _normalBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vCount, float3Size);
+                _uvBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vCount, sizeof(float) * 2);
+                
+                _skinnedMeshDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _skinnedMeshsources.Count, Marshal.SizeOf<SkinnedMeshData>());
                 
                 _meshSamplingBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,_pointCount, Marshal.SizeOf<SkinnedMeshSampling>());
             }
 
             // Object space
-            var sourceLength = _sources.Length;
-            if (sourceLength > MaxSkinnedMeshSourceCount)
-            {
-                Debug.LogError($"Too many skinned mesh sources. Max count is {MaxSkinnedMeshSourceCount}");
-                sourceLength = MaxSkinnedMeshSourceCount;
-            }
-            
-            _previousRootMatrices = new Matrix4x4[sourceLength];
-            _currentRootMatrices = new Matrix4x4[sourceLength];
-            _worldToLocalTransforms = new Matrix4x4[sourceLength];
             _positionOSIndexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vCount, sizeof(uint));
-            
             var offset = 0;
-            for(var i = 0; i < sourceLength; i++)
+            var skinnedMeshSourceI = 0;
+            foreach (DictionaryEntry pair in _skinnedMeshsources)
             {
-                var localVCount = _sources[i].sharedMesh.vertexCount;
+                var skinnedMeshRenderer = (SkinnedMeshRenderer) pair.Key;
+                var localVCount = skinnedMeshRenderer.sharedMesh.vertexCount;
                 var osIndex = new int[vCount];
                 for (var j = 0; j < osIndex.Length; j++)
                 {
-                    osIndex[j] = i;
+                    osIndex[j] = skinnedMeshSourceI;
                 }
                 _positionOSIndexBuffer.SetData(osIndex, 0, offset, localVCount);
                 
                 offset += localVCount;
+                
+                skinnedMeshSourceI++;
             }
 
             // Temporary mesh object
@@ -253,6 +273,9 @@ namespace Kuyuri
             
             _uvBuffer?.Dispose();
             _uvBuffer = null;
+            
+            _skinnedMeshDataBuffer?.Dispose();
+            _skinnedMeshDataBuffer = null;
             
             _meshSamplingBuffer?.Dispose();
             _meshSamplingBuffer = null;
@@ -299,11 +322,7 @@ namespace Kuyuri
         private void TransferMeshSampling()
         {
             _compute.SetInt("SampleCount", _pointCount);
-            _compute.SetMatrixArray("Transforms", _currentRootMatrices);
-            _compute.SetMatrixArray("OldTransforms", _previousRootMatrices);
             _compute.SetFloat("FrameRate", 1 / Time.deltaTime);
-            
-            _compute.SetMatrixArray("WorldToLocalTransforms", _worldToLocalTransforms);
 
             _compute.SetBuffer(0, "SamplePoints", _samplePoints);
             _compute.SetBuffer(0, "PositionBuffer", _positionBuffer1);
@@ -311,6 +330,7 @@ namespace Kuyuri
             _compute.SetBuffer(0, "OldPositionBuffer", _positionBuffer2);
             _compute.SetBuffer(0, "NormalBuffer", _normalBuffer);
             _compute.SetBuffer(0, "UvBuffer", _uvBuffer);
+            _compute.SetBuffer(0, "SkinnedMeshDataBuffer", _skinnedMeshDataBuffer);
             
             _compute.SetBuffer(0, "MeshSamplingBuffer", _meshSamplingBuffer);
 
