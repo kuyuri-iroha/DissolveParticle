@@ -12,13 +12,23 @@ namespace Kuyuri
         public Vector3 normal;
         public Vector3 velocity;
         public Vector2 uv;
+        public uint meshIndex;
         public float enabled;
     };
     
     public class DissolveSamplingMeshBakerLil : SkinnedMeshBaker
     {
+        public struct DissolveMeshData
+        {
+            public int isDissolve;
+            public Vector3 dissolvePosition;
+            public float dissolveRange;
+            public float dissolveBlur;
+        }
+        
         private readonly ComputeShader _dissolveBorderCompute;
         private GraphicsBuffer _dissolveBorderSamplingBuffer;
+        private GraphicsBuffer _dissolveMeshDataBuffer;
 
         private int _samplingKernelIndex;
         
@@ -30,25 +40,15 @@ namespace Kuyuri
             
             _samplingKernelIndex = _dissolveBorderCompute.FindKernel("DissolveBorderSamplingLil");
         }
-        
-        /// <summary>
-        /// 使わないため、呼び出すと例外を投げる
-        /// </summary>
-        /// <exception cref="NotSupportedException"></exception>
-        public override void UpdateBuffer()
-        {
-            throw new NotSupportedException();
-        }
 
         /// <summary>
-        /// ディゾルブに必要なパラメータを設定してディゾルブ境界をリサンプリング
+        /// ディゾルブ境界をリサンプリング
         /// </summary>
-        /// <param name="dissolvePosition"></param>
-        /// <param name="dissolveRange"></param>
-        /// <param name="dissolveBlur"></param>
-        public void UpdateBuffer(Vector3 dissolvePosition, float dissolveRange, float dissolveBlur)
+        public void UpdateBuffer(DissolveMeshData[] dissolveMeshData)
         {
             base.UpdateBuffer();
+            
+            _dissolveMeshDataBuffer.SetData(dissolveMeshData);
             
             if (!IsValid) return;
             
@@ -59,12 +59,9 @@ namespace Kuyuri
             // Sampling Dispatch
             _dissolveBorderCompute.SetInt("SourceCount", VertexCount);
             
-            _dissolveBorderCompute.SetVector("DissolvePosition", dissolvePosition);
-            _dissolveBorderCompute.SetFloat("DissolveRange", dissolveRange);
-            _dissolveBorderCompute.SetFloat("DissolveBlur", dissolveBlur);
-            
             _dissolveBorderCompute.SetBuffer(_samplingKernelIndex, "MeshSamplingBuffer", MeshSamplingBuffer);
             _dissolveBorderCompute.SetBuffer(_samplingKernelIndex, "DissolveBorderSamplingBuffer", _dissolveBorderSamplingBuffer);
+            _dissolveBorderCompute.SetBuffer(_samplingKernelIndex, "DissolveMeshDataBuffer", _dissolveMeshDataBuffer);
             
             _dissolveBorderCompute.Dispatch(_samplingKernelIndex, VertexCount / ComputeThreadNum, 1, 1);
         }
@@ -87,6 +84,9 @@ namespace Kuyuri
             
             _dissolveBorderSamplingBuffer?.Dispose();
             _dissolveBorderSamplingBuffer = null;
+            
+            _dissolveMeshDataBuffer?.Dispose();
+            _dissolveMeshDataBuffer = null;
         }
 
         protected override void Initialize()
@@ -94,6 +94,7 @@ namespace Kuyuri
             base.Initialize();
             
             _dissolveBorderSamplingBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, VertexCount, Marshal.SizeOf<DissolveSamplingPointLil>());
+            _dissolveMeshDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, SkinnedMeshSources.Count, Marshal.SizeOf<DissolveMeshData>());
         }
     }
 }
