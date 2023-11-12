@@ -1,15 +1,21 @@
-﻿using DG.Tweening;
+﻿using System.Collections;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Linq;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.VFX;
 
 namespace Kuyuri
 {
+
     /// <summary>
     /// lilToon用ディゾルブスクリプト
     /// 予めシェーダのディゾルブ設定を有効にしてください
     /// </summary>
     public class CharacterDissolveEffectLil : MonoBehaviour
     {
+        
         [SerializeField] private GameObject characterSceneObject;
 
         [SerializeField, Min(64)] private int pointCount = 32768;
@@ -38,26 +44,56 @@ namespace Kuyuri
         [SerializeField] private Ease dissolveEase = Ease.Linear;
 
         private DissolveSamplingMeshBakerLil dissolveSamplingMeshBakerLil;
-        private MaterialPropertyBlock _materialPropertyBlock;
-        private Vector3 _dissolvePosition;
-
-        private Vector3 DissolvePosition
-        {
-            get => _dissolvePosition;
-            set => SetDissolvePosition(value);
-        }
-
-        private Tween _appearTween;
-        private Tween _disappearTween;
-        
         private bool _initialized = false;
-        private bool _isAppear = false;
+        private bool _dissolving = false;
 
         private static readonly int DissolvePos = Shader.PropertyToID("_DissolvePos");
         private static readonly int DissolveParam = Shader.PropertyToID("_DissolveParams");
+        
+        private class DissolveEffectMeshData
+        {
+            public SkinnedMeshRenderer skinnedMeshRenderer;
+            public MaterialPropertyBlock materialPropertyBlock;
+            public DissolveSamplingMeshBakerLil.DissolveMeshData dissolveMeshData;
+            
+            public Vector3 DissolvePosition
+            {
+                get => dissolveMeshData.dissolvePosition;
+                set => SetDissolvePosition(value);
+            }
+        
+            public Tween appearTween;
+            public Tween disappearTween;
+        
+            public bool isAppear = false;
+        
+            public DissolveEffectMeshData(SkinnedMeshRenderer skinnedMeshRenderer, Vector3 startDissolvePosition, bool appearOnStart, float dissolveRange, float dissolveBlur)
+            {
+                materialPropertyBlock = new MaterialPropertyBlock();
+
+                this.skinnedMeshRenderer = skinnedMeshRenderer;
+                dissolveMeshData.dissolveRange = dissolveRange;
+                dissolveMeshData.dissolveBlur = dissolveBlur;
+                dissolveMeshData.dissolvePosition = startDissolvePosition;
+                isAppear = appearOnStart;
+            }
+
+            private void SetDissolvePosition(Vector3 dissolvePos)
+            {
+                dissolveMeshData.dissolvePosition = dissolvePos;
+                skinnedMeshRenderer.GetPropertyBlock(materialPropertyBlock);
+                materialPropertyBlock.SetVector(DissolvePos, dissolveMeshData.dissolvePosition);
+                materialPropertyBlock.SetVector(DissolveParam, new Vector4(3.0f, 0, dissolveMeshData.dissolveRange, dissolveMeshData.dissolveBlur));
+                skinnedMeshRenderer.SetPropertyBlock(materialPropertyBlock);
+            }
+        }
+        
+        private OrderedDictionary _dissolveEffectMeshData = new OrderedDictionary();
 
         private void OnEnable()
         {
+            _dissolveEffectMeshData.Clear();
+            
             if(characterSceneObject == null)
             {
                 characterSceneObject = transform.parent.gameObject;
@@ -65,6 +101,13 @@ namespace Kuyuri
             if(visualEffect == null)
             {
                 visualEffect = GetComponent<VisualEffect>();
+            }
+            
+            var skinnedMeshRenderers = GetSkinnedMeshesFromCharacter(characterSceneObject);
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var dissolveEffectMeshData = new DissolveEffectMeshData(skinnedMeshRenderer, appearStartPos, appearOnStart, dissolveRange, dissolveBlur);
+                _dissolveEffectMeshData.Add(skinnedMeshRenderer.name, dissolveEffectMeshData);
             }
             
             // Mesh baker
@@ -76,12 +119,11 @@ namespace Kuyuri
             }
 
             dissolveSamplingMeshBakerLil.SetVertexCountNoValidation(pointCount);
-            dissolveSamplingMeshBakerLil.SetSkinnedMeshesNoValidation(GetSkinnedMeshesFromCharacter(characterSceneObject));
+            dissolveSamplingMeshBakerLil.SetSkinnedMeshesNoValidation(skinnedMeshRenderers);
             dissolveSamplingMeshBakerLil.Validation();
 
             // Dissolve
             var startDissolvePosition = Vector3.zero;
-            _isAppear = appearOnStart;
             if (appearOnStart)
             {
                 startDissolvePosition = appearEndPos;
@@ -90,9 +132,6 @@ namespace Kuyuri
             {
                 startDissolvePosition = appearStartPos;
             }
-
-            _materialPropertyBlock = new MaterialPropertyBlock();
-            DissolvePosition = startDissolvePosition;
         }
 
         private void OnValidate()
@@ -112,10 +151,9 @@ namespace Kuyuri
         
         private void Update()
         {
-            if(_initialized == false)
+            if (_dissolving)
             {
                 UpdateBuffer();
-                _initialized = true;
             }
         }
 
@@ -126,7 +164,7 @@ namespace Kuyuri
         /// </summary>
         private void UpdateBuffer()
         {
-            dissolveSamplingMeshBakerLil.UpdateBuffer(_dissolvePosition, dissolveRange, dissolveBlur);
+            dissolveSamplingMeshBakerLil.UpdateBuffer(_dissolveEffectMeshData.Values.Cast<DissolveEffectMeshData>().Select(v => v.dissolveMeshData).ToArray());
 
             if (visualEffect.HasGraphicsBuffer("MeshSamplingBuffer"))
             {
@@ -138,26 +176,6 @@ namespace Kuyuri
             }
         }
 
-        /// <summary>
-        /// ディゾルブ位置の変更とともに、マテリアルの変更を行う
-        /// </summary>
-        /// <param name="dissolvePos">ディゾルブ位置</param>
-        private void SetDissolvePosition(Vector3 dissolvePos)
-        {
-            _dissolvePosition = dissolvePos;
-            _materialPropertyBlock.SetVector(DissolvePos, dissolvePos);
-            _materialPropertyBlock.SetVector(DissolveParam, new Vector4(3.0f, 0, dissolveRange, dissolveBlur));
-
-            for (var i = 0; i <  dissolveSamplingMeshBakerLil.Sources.Length; i++)
-            {
-                var materialCount = dissolveSamplingMeshBakerLil.SourcesMaterialsLength[i];
-                for (var j = 0; j < materialCount; j++)
-                {
-                    dissolveSamplingMeshBakerLil.Sources[i].SetPropertyBlock(_materialPropertyBlock, j);
-                }
-            }
-        }
-
         #endregion
 
         #region Public
@@ -165,124 +183,189 @@ namespace Kuyuri
         /// <summary>
         /// ディゾルブで現れる
         /// </summary>
-        public void DissolveAppear()
+        public void DissolveAppear(bool forceMode = false)
         {
-            _appearTween?.Kill();
-            _disappearTween?.Kill();
-
-            ActivateMeshes(true);
-            _isAppear = false;
-
-            DissolvePosition = appearStartPos;
-            _appearTween = DOTween.To(
-                    () => DissolvePosition,
-                    (x) => DissolvePosition = x,
-                    appearEndPos,
-                    dissolveDuration
-                )
-                .SetEase(dissolveEase)
-                .OnUpdate(UpdateBuffer)
-                .OnComplete(() =>
-                {
-                    visualEffect.SendEvent(stopEventName);
-                    _isAppear = true;
-                });
-
-            visualEffect.SendEvent(spawnEventName);
+            foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
+            {
+                DissolveAppearInternal(data, forceMode);
+            }
         }
 
         /// <summary>
         /// ディゾルブで消える
         /// </summary>
-        public void DissolveDisappear()
+        public void DissolveDisappear(bool forceMode = false)
         {
-            _appearTween?.Kill();
-            _disappearTween?.Kill();
-
-            ActivateMeshes(true);
-            _isAppear = true;
-            
-            DissolvePosition = disappearStartPos;
-            _disappearTween = DOTween.To(
-                    () => DissolvePosition,
-                    (x) => DissolvePosition = x,
-                    disappearEndPos,
-                    dissolveDuration
-                )
-                .SetEase(dissolveEase)
-                .OnUpdate(UpdateBuffer)
-                .OnComplete(() =>
-                {
-                    visualEffect.SendEvent(stopEventName);
-                    ActivateMeshes(false);
-                    _isAppear = false;
-                });
-
-            visualEffect.SendEvent(spawnEventName);
-        }
-
-        public void InstantToggle()
-        {
-            InstantFromBool(!_isAppear);
+            foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
+            {
+                DissolveDisappearInternal(data, forceMode);
+            }
         }
         
         public void DissolveToggle()
         {
-            DissolveFromBool(!_isAppear);
+            DissolveFromBool(!IsAppear());
         }
 
-        public void InstantAppear()
+        public void InstantAppear(bool forceMode = false)
         {
-            _appearTween?.Kill();
-            _disappearTween?.Kill();
-            
-            ActivateMeshes(true);
-            _isAppear = true;
-            
-            DissolvePosition = appearEndPos;
+            foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData)dissolveEffectMeshData.Value)
+            {
+                InstantAppearInternal(data, forceMode);
+            }
         }
         
-        public void InstantDisappear()
+        public void InstantDisappear(bool forceMode = false)
         {
-            _appearTween?.Kill();
-            _disappearTween?.Kill();
-            
-            ActivateMeshes(false);
-            _isAppear = false;
-            
-            DissolvePosition = disappearEndPos;
+            foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData)dissolveEffectMeshData.Value)
+            {
+                InstantDisappearInternal(data, forceMode);
+            }
         }
         
-        public bool IsAppear()
+        public void InstantToggle()
         {
-            return _isAppear;
+            InstantFromBool(!IsAppear());
+        }
+        
+        public void DissolveAppearMesh(bool forceMode, string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    DissolveAppearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void DissolveDisappearMesh(bool forceMode, string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    DissolveDisappearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void DissolveToggleMesh(string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    DissolveMeshFromBool(!data.isAppear, false, meshName);
+                }
+            }
+        }
+        
+        public void InstantAppearMesh(bool forceMode, string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    InstantAppearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void InstantDisappearMesh(bool forceMode, string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    InstantDisappearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void InstantToggleMesh(string meshNamesStr)
+        {
+            var meshNames = SplitMeshNames(meshNamesStr);
+            foreach (var meshName in meshNames)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
+                if (data != null)
+                {
+                    InstantMeshFromBool(!data.isAppear, false, meshName);
+                }
+            }
+        }
+
+        public bool IsAppear(string meshName)
+        {
+            var dissolveEffectMeshData = (DissolveEffectMeshData) _dissolveEffectMeshData[meshName];
+            if (dissolveEffectMeshData == null)
+            {
+                Debug.LogError($"{meshName} is not found in children of {characterSceneObject.name}.");
+            }
+            return dissolveEffectMeshData is { isAppear: true };
         }
 
         /// <summary>
         /// ディゾルブをブールで制御する
         /// </summary>
         /// <param name="appear">tureで現れ、falseで消える</param>
-        public void DissolveFromBool(bool appear)
+        /// <param name="forceMode"></param>
+        public void DissolveFromBool(bool appear, bool forceMode = false)
         {
             if (appear)
             {
-                DissolveAppear();
+                DissolveAppear(forceMode);
             }
             else
             {
-                DissolveDisappear();
+                DissolveDisappear(forceMode);
             }
         }
 
-        public void InstantFromBool(bool appear)
+        public void InstantFromBool(bool appear, bool forceMode = false)
         {
             if (appear)
             {
-                InstantAppear();
+                InstantAppear(forceMode);
             }
             else
             {
-                InstantDisappear();
+                InstantDisappear(forceMode);
+            }
+        }
+        
+        public void DissolveMeshFromBool(bool appear, bool forceMode, string meshNamesStr)
+        {
+            if (appear)
+            {
+                DissolveAppearMesh(forceMode, meshNamesStr);
+            }
+            else
+            {
+                DissolveDisappearMesh(forceMode, meshNamesStr);
+            }
+        }
+        
+        public void InstantMeshFromBool(bool appear, bool forceMode, string meshNamesStr)
+        {
+            if (appear)
+            {
+                InstantAppearMesh(forceMode, meshNamesStr);
+            }
+            else
+            {
+                InstantDisappearMesh(forceMode, meshNamesStr);
             }
         }
 
@@ -295,12 +378,120 @@ namespace Kuyuri
             return characterGameObject.GetComponentsInChildren<SkinnedMeshRenderer>();
         }
 
-        private void ActivateMeshes(bool active)
+        private bool DissolveAppearInternal(DissolveEffectMeshData data, bool forceMode)
         {
-            for (var i = 0; i <  dissolveSamplingMeshBakerLil.Sources.Length; i++)
-            {
-                dissolveSamplingMeshBakerLil.Sources[i].enabled = active;
-            }
+            if(data.isAppear && !forceMode) return false;
+            
+            data.appearTween?.Kill();
+            data.disappearTween?.Kill();
+
+            data.skinnedMeshRenderer.enabled = true;
+            data.isAppear = false;
+
+            data.DissolvePosition = appearStartPos;
+            data.appearTween = DOTween.To(
+                    () => data.DissolvePosition,
+                    (x) => data.DissolvePosition = x,
+                    appearEndPos,
+                    dissolveDuration
+                )
+                .SetEase(dissolveEase)
+                .OnUpdate(() =>
+                {
+                    visualEffect.SendEvent(spawnEventName);
+                    _dissolving = true;
+                    data.dissolveMeshData.isDissolve = 1;
+                })
+                .OnComplete(() =>
+                {
+                    visualEffect.SendEvent(stopEventName);
+                    _dissolving = false;
+                    data.dissolveMeshData.isDissolve = 0;
+                    
+                    data.isAppear = true;
+                });
+
+            return true;
+        }
+
+        private bool DissolveDisappearInternal(DissolveEffectMeshData data, bool forceMode)
+        {
+            if(!data.isAppear && !forceMode) return false;
+            
+            data.appearTween?.Kill();
+            data.disappearTween?.Kill();
+
+            data.skinnedMeshRenderer.enabled = true;
+            data.isAppear = true;
+
+            data.DissolvePosition = disappearStartPos;
+            data.appearTween = DOTween.To(
+                    () => data.DissolvePosition,
+                    (x) => data.DissolvePosition = x,
+                    disappearEndPos,
+                    dissolveDuration
+                )
+                .SetEase(dissolveEase)
+                .OnUpdate(() =>
+                {
+                    visualEffect.SendEvent(spawnEventName);
+                    _dissolving = true;
+                    data.dissolveMeshData.isDissolve = 1;
+                })
+                .OnComplete(() =>
+                {
+                    visualEffect.SendEvent(stopEventName);
+                    _dissolving = false;
+                    data.dissolveMeshData.isDissolve = 0;
+                    
+                    data.skinnedMeshRenderer.enabled = false;
+                    data.isAppear = false;
+                });
+
+            return true;
+        }
+        
+        private bool InstantAppearInternal(DissolveEffectMeshData data, bool forceMode)
+        {
+            if(data.isAppear && !forceMode) return false;
+            
+            data.appearTween?.Kill();
+            data.disappearTween?.Kill();
+
+            data.skinnedMeshRenderer.enabled = true;
+            data.isAppear = true;
+
+            data.DissolvePosition = appearEndPos;
+
+            return true;
+        }
+        
+        private bool InstantDisappearInternal(DissolveEffectMeshData data, bool forceMode)
+        {
+            if(!data.isAppear && !forceMode) return false;
+            
+            data.appearTween?.Kill();
+            data.disappearTween?.Kill();
+
+            data.skinnedMeshRenderer.enabled = false;
+            data.isAppear = false;
+
+            data.DissolvePosition = disappearEndPos;
+
+            return true;
+        }
+
+        private string[] SplitMeshNames(string meshNameStr)
+        {
+            return meshNameStr.Split(',');
+        }
+
+        /// <summary>
+        /// キャラクターのメッシュの半数以上が表示されているかどうか
+        /// </summary>
+        private bool IsAppear()
+        {
+            return _dissolveEffectMeshData.Values.Cast<DissolveEffectMeshData>().Count(v => v.isAppear) > _dissolveEffectMeshData.Values.Count / 2;
         }
 
         #endregion
@@ -342,7 +533,7 @@ namespace Kuyuri
         {
             DissolveToggle();
         }
-        
+
         #endregion
     }
 }
