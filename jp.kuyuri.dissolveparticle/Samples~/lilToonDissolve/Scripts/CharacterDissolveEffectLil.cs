@@ -180,9 +180,8 @@ namespace Kuyuri
 
         #region Public
 
-        /// <summary>
-        /// ディゾルブで現れる
-        /// </summary>
+        // == キャラクターのメッシュ全てに対して処理する ==
+        
         public void DissolveAppear(bool forceMode = false)
         {
             foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
@@ -191,9 +190,6 @@ namespace Kuyuri
             }
         }
 
-        /// <summary>
-        /// ディゾルブで消える
-        /// </summary>
         public void DissolveDisappear(bool forceMode = false)
         {
             foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
@@ -227,6 +223,8 @@ namespace Kuyuri
         {
             InstantFromBool(!IsAppear());
         }
+        
+        // == 文字列で指定したメッシュ全てに対して処理する ==
         
         public void DissolveAppearMesh(string meshNamesStr, bool forceMode = false)
         {
@@ -305,15 +303,79 @@ namespace Kuyuri
                 }
             }
         }
-
-        public bool IsAppear(string meshName)
+        
+        // == コンポーネントで指定したメッシュ全てに対して処理する ==
+        
+        public void DissolveAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
         {
-            var dissolveEffectMeshData = (DissolveEffectMeshData) _dissolveEffectMeshData[meshName];
-            if (dissolveEffectMeshData == null)
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
             {
-                Debug.LogError($"{meshName} is not found in children of {characterSceneObject.name}.");
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    DissolveAppearInternal(data, forceMode);
+                }
             }
-            return dissolveEffectMeshData is { isAppear: true };
+        }
+        
+        public void DissolveDisappearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
+        {
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    DissolveDisappearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void DissolveToggleMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, string meshNamesStr)
+        {
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    DissolveMeshFromBool(!data.isAppear, skinnedMeshRenderer.name);
+                }
+            }
+        }
+        
+        public void InstantAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
+        {
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    InstantAppearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void InstantDisappearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
+        {
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    InstantDisappearInternal(data, forceMode);
+                }
+            }
+        }
+        
+        public void InstantToggleMesh(SkinnedMeshRenderer[] skinnedMeshRenderers)
+        {
+            foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+            {
+                var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
+                if (data != null)
+                {
+                    InstantMeshFromBool(!data.isAppear, skinnedMeshRenderer.name);
+                }
+            }
         }
 
         /// <summary>
