@@ -228,7 +228,7 @@ namespace Kuyuri
             InstantFromBool(!IsAppear());
         }
         
-        public void DissolveAppearMesh(bool forceMode, string meshNamesStr)
+        public void DissolveAppearMesh(string meshNamesStr, bool forceMode = false)
         {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
@@ -241,7 +241,7 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveDisappearMesh(bool forceMode, string meshNamesStr)
+        public void DissolveDisappearMesh(string meshNamesStr, bool forceMode = false)
         {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
@@ -262,12 +262,12 @@ namespace Kuyuri
                 var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
                 if (data != null)
                 {
-                    DissolveMeshFromBool(!data.isAppear, false, meshName);
+                    DissolveMeshFromBool(!data.isAppear, meshName);
                 }
             }
         }
         
-        public void InstantAppearMesh(bool forceMode, string meshNamesStr)
+        public void InstantAppearMesh(string meshNamesStr, bool forceMode = false)
         {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
@@ -280,7 +280,7 @@ namespace Kuyuri
             }
         }
         
-        public void InstantDisappearMesh(bool forceMode, string meshNamesStr)
+        public void InstantDisappearMesh(string meshNamesStr, bool forceMode = false)
         {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
@@ -301,7 +301,7 @@ namespace Kuyuri
                 var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
                 if (data != null)
                 {
-                    InstantMeshFromBool(!data.isAppear, false, meshName);
+                    InstantMeshFromBool(!data.isAppear, meshName);
                 }
             }
         }
@@ -345,27 +345,27 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveMeshFromBool(bool appear, bool forceMode, string meshNamesStr)
+        public void DissolveMeshFromBool(bool appear, string meshNamesStr, bool forceMode = false)
         {
             if (appear)
             {
-                DissolveAppearMesh(forceMode, meshNamesStr);
+                DissolveAppearMesh(meshNamesStr, forceMode);
             }
             else
             {
-                DissolveDisappearMesh(forceMode, meshNamesStr);
+                DissolveDisappearMesh(meshNamesStr, forceMode);
             }
         }
         
-        public void InstantMeshFromBool(bool appear, bool forceMode, string meshNamesStr)
+        public void InstantMeshFromBool(bool appear, string meshNamesStr, bool forceMode = false)
         {
             if (appear)
             {
-                InstantAppearMesh(forceMode, meshNamesStr);
+                InstantAppearMesh(meshNamesStr, forceMode);
             }
             else
             {
-                InstantDisappearMesh(forceMode, meshNamesStr);
+                InstantDisappearMesh(meshNamesStr, forceMode);
             }
         }
 
