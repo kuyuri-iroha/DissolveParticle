@@ -184,27 +184,40 @@ namespace Kuyuri
 
         // == キャラクターのメッシュ全てに対して処理する ==
         
-        public void DissolveAppear(float duration = float.MinValue, bool forceMode = false)
+        public void DissolveAppear(float duration, bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
             foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
             {
                 DissolveAppearInternal(data, duration, forceMode);
             }
         }
-
-        public void DissolveDisappear(float duration = float.MinValue, bool forceMode = false)
+        
+        public void DissolveAppear(bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
+            DissolveAppear(dissolveDuration, forceMode);
+        }
+
+        public void DissolveDisappear(float duration, bool forceMode = false)
+        {
             foreach (var data in from DictionaryEntry dissolveEffectMeshData in _dissolveEffectMeshData select (DissolveEffectMeshData) dissolveEffectMeshData.Value)
             {
                 DissolveDisappearInternal(data, duration, forceMode);
             }
         }
         
+        public void DissolveDisappear(bool forceMode = false)
+        {
+            DissolveDisappear(dissolveDuration, forceMode);
+        }
+        
         public void DissolveToggle()
         {
             DissolveFromBool(!IsAppear());
+        }
+        
+        public void DissolveToggle(float duration)
+        {
+            DissolveFromBool(!IsAppear(), duration);
         }
 
         public void InstantAppear(bool forceMode = false)
@@ -230,9 +243,8 @@ namespace Kuyuri
         
         // == 文字列で指定したメッシュ全てに対して処理する ==
         
-        public void DissolveAppearMesh(string meshNamesStr, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveAppearMesh(string meshNamesStr, float duration, bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
             {
@@ -244,9 +256,13 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveDisappearMesh(string meshNamesStr, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveAppearMesh(string meshNamesStr, bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
+            DissolveAppearMesh(meshNamesStr, dissolveDuration, forceMode);
+        }
+        
+        public void DissolveDisappearMesh(string meshNamesStr, float duration, bool forceMode = false)
+        {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
             {
@@ -258,7 +274,12 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveToggleMesh(string meshNamesStr)
+        public void DissolveDisappearMesh(string meshNamesStr, bool forceMode = false)
+        {
+            DissolveDisappearMesh(meshNamesStr, dissolveDuration, forceMode);
+        }
+        
+        public void DissolveToggleMesh(string meshNamesStr, float duration)
         {
             var meshNames = SplitMeshNames(meshNamesStr);
             foreach (var meshName in meshNames)
@@ -266,9 +287,14 @@ namespace Kuyuri
                 var data = (DissolveEffectMeshData)_dissolveEffectMeshData[meshName];
                 if (data != null)
                 {
-                    DissolveMeshFromBool(!data.isAppear, meshName);
+                    DissolveMeshFromBool(!data.isAppear, meshName, duration);
                 }
             }
+        }
+        
+        public void DissolveToggleMesh(string meshNamesStr)
+        {
+            DissolveToggleMesh(meshNamesStr, dissolveDuration);
         }
         
         public void InstantAppearMesh(string meshNamesStr, bool forceMode = false)
@@ -312,9 +338,8 @@ namespace Kuyuri
         
         // == コンポーネントで指定したメッシュ全てに対して処理する ==
         
-        public void DissolveAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, float duration, bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
             foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
             {
                 var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
@@ -325,9 +350,13 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveDisappearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
         {
-            duration = Mathf.Approximately(duration, float.MinValue) ? dissolveDuration : duration;
+            DissolveAppearMesh(skinnedMeshRenderers, dissolveDuration, forceMode);
+        }
+        
+        public void DissolveDisappearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, float duration, bool forceMode = false)
+        {
             foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
             {
                 var data = (DissolveEffectMeshData)_dissolveEffectMeshData[skinnedMeshRenderer.name];
@@ -338,7 +367,12 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveToggleMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, string meshNamesStr)
+        public void DissolveDisappearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
+        {
+            DissolveDisappearMesh(skinnedMeshRenderers, dissolveDuration, forceMode);
+        }
+        
+        public void DissolveToggleMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, float duration)
         {
             foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
             {
@@ -348,6 +382,11 @@ namespace Kuyuri
                     DissolveMeshFromBool(!data.isAppear, skinnedMeshRenderer.name);
                 }
             }
+        }
+        
+        public void DissolveToggleMesh(SkinnedMeshRenderer[] skinnedMeshRenderers)
+        {
+            DissolveToggleMesh(skinnedMeshRenderers, dissolveDuration);
         }
         
         public void InstantAppearMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, bool forceMode = false)
@@ -390,8 +429,9 @@ namespace Kuyuri
         /// ディゾルブをブールで制御する
         /// </summary>
         /// <param name="appear">tureで現れ、falseで消える</param>
+        /// <param name="duration"></param>
         /// <param name="forceMode"></param>
-        public void DissolveFromBool(bool appear, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveFromBool(bool appear, float duration, bool forceMode = false)
         {
             if (appear)
             {
@@ -401,6 +441,11 @@ namespace Kuyuri
             {
                 DissolveDisappear(duration, forceMode);
             }
+        }
+        
+        public void DissolveFromBool(bool appear, bool forceMode = false)
+        {
+            DissolveFromBool(appear, dissolveDuration, forceMode);
         }
 
         public void InstantFromBool(bool appear, bool forceMode = false)
@@ -415,7 +460,7 @@ namespace Kuyuri
             }
         }
         
-        public void DissolveMeshFromBool(bool appear, string meshNamesStr, float duration = float.MinValue, bool forceMode = false)
+        public void DissolveMeshFromBool(bool appear, string meshNamesStr, float duration, bool forceMode = false)
         {
             if (appear)
             {
@@ -425,6 +470,11 @@ namespace Kuyuri
             {
                 DissolveDisappearMesh(meshNamesStr, duration, forceMode);
             }
+        }
+        
+        public void DissolveMeshFromBool(bool appear, string meshNamesStr, bool forceMode = false)
+        {
+            DissolveMeshFromBool(appear, meshNamesStr, dissolveDuration, forceMode);
         }
         
         public void InstantMeshFromBool(bool appear, string meshNamesStr, bool forceMode = false)
