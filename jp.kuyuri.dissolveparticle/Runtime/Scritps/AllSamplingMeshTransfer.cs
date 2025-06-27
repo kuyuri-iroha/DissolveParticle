@@ -14,12 +14,14 @@ namespace Kuyuri
         [SerializeField] private string meshSamplingBufferProperty = "MeshSamplingBuffer";
         
         private MeshBaker _meshBaker;
+        private MeshRenderer[] _cachedMeshRenderers;
+        private GameObject _lastParent;
         
         private void OnEnable()
         {
             _meshBaker = new MeshBaker();
             
-            if (!visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
+            if (visualEffect != null && !visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
             {
                 Debug.LogError($"{meshSamplingBufferProperty} not found in {visualEffect.name}.");
             }
@@ -33,17 +35,26 @@ namespace Kuyuri
 
         private void OnValidate()
         {
+            if (_lastParent != parent)
+            {
+                _cachedMeshRenderers = null;
+                _lastParent = parent;
+            }
             _meshBaker?.Validation();
         }
 
         private void OnDisable()
         {
             _meshBaker?.Dispose();
+            _cachedMeshRenderers = null;
+            _lastParent = null;
         }
 
         private void OnDestroy()
         {
             _meshBaker?.Dispose();
+            _cachedMeshRenderers = null;
+            _lastParent = null;
         }
 
         private void Update()
@@ -55,9 +66,11 @@ namespace Kuyuri
 
         private void UpdateBuffer()
         {
+            if (_meshBaker == null) return;
+            
             _meshBaker.UpdateBuffer();
             
-            if (visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
+            if (visualEffect != null && visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
             {
                 visualEffect.SetGraphicsBuffer(meshSamplingBufferProperty, _meshBaker.MeshSamplingBuffer);
             }
@@ -65,7 +78,15 @@ namespace Kuyuri
 
         private MeshRenderer[] GetMeshesFromParent(GameObject characterGameObject)
         {
-            return characterGameObject.GetComponentsInChildren<MeshRenderer>();
+            if (characterGameObject == null) return new MeshRenderer[0];
+            
+            if (_cachedMeshRenderers == null || _lastParent != characterGameObject)
+            {
+                _cachedMeshRenderers = characterGameObject.GetComponentsInChildren<MeshRenderer>();
+                _lastParent = characterGameObject;
+            }
+            
+            return _cachedMeshRenderers ?? new MeshRenderer[0];
         }
 
         #endregion

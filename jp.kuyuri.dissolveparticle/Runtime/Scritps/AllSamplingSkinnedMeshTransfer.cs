@@ -13,12 +13,14 @@ namespace Kuyuri
         [SerializeField] private string meshSamplingBufferProperty = "MeshSamplingBuffer";
         
         private SkinnedMeshBaker _skinnedMeshBaker;
+        private SkinnedMeshRenderer[] _cachedSkinnedMeshRenderers;
+        private GameObject _lastCharacter;
         
         private void OnEnable()
         {
             _skinnedMeshBaker = new SkinnedMeshBaker();
             
-            if (!visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
+            if (visualEffect != null && !visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
             {
                 Debug.LogError($"{meshSamplingBufferProperty} not found in {visualEffect.name}.");
             }
@@ -30,17 +32,26 @@ namespace Kuyuri
 
         private void OnValidate()
         {
+            if (_lastCharacter != character)
+            {
+                _cachedSkinnedMeshRenderers = null;
+                _lastCharacter = character;
+            }
             _skinnedMeshBaker?.Validation();
         }
 
         private void OnDisable()
         {
             _skinnedMeshBaker?.Dispose();
+            _cachedSkinnedMeshRenderers = null;
+            _lastCharacter = null;
         }
 
         private void OnDestroy()
         {
             _skinnedMeshBaker?.Dispose();
+            _cachedSkinnedMeshRenderers = null;
+            _lastCharacter = null;
         }
 
         private void Update()
@@ -52,9 +63,11 @@ namespace Kuyuri
 
         private void UpdateBuffer()
         {
+            if (_skinnedMeshBaker == null) return;
+            
             _skinnedMeshBaker.UpdateBuffer();
             
-            if (visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
+            if (visualEffect != null && visualEffect.HasGraphicsBuffer(meshSamplingBufferProperty))
             {
                 visualEffect.SetGraphicsBuffer(meshSamplingBufferProperty, _skinnedMeshBaker.MeshSamplingBuffer);
             }
@@ -62,7 +75,15 @@ namespace Kuyuri
 
         private SkinnedMeshRenderer[] GetSkinnedMeshesFromCharacter(GameObject characterGameObject)
         {
-            return characterGameObject.GetComponentsInChildren<SkinnedMeshRenderer>();
+            if (characterGameObject == null) return new SkinnedMeshRenderer[0];
+            
+            if (_cachedSkinnedMeshRenderers == null || _lastCharacter != characterGameObject)
+            {
+                _cachedSkinnedMeshRenderers = characterGameObject.GetComponentsInChildren<SkinnedMeshRenderer>();
+                _lastCharacter = characterGameObject;
+            }
+            
+            return _cachedSkinnedMeshRenderers ?? new SkinnedMeshRenderer[0];
         }
 
         #endregion
